@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Particle Gesture Lab</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#050508;--surface:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.08);
+  --accent:#c084fc;--accent2:#67e8f9;--accent3:#f472b6;--accent4:#86efac;
+  --text:rgba(255,255,255,0.85);--muted:rgba(255,255,255,0.35);
+  --font:'Courier New',monospace;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:var(--font);color:var(--text)}
+
+/* canvas */
+#c{display:block;position:fixed;inset:0;width:100%;height:100%}
+
+/* webcam */
+#vid{
+  position:fixed;top:16px;right:16px;width:200px;height:150px;
+  border-radius:14px;border:1px solid var(--border);
+  object-fit:cover;transform:scaleX(-1);z-index:20;
+  box-shadow:0 0 30px rgba(192,132,252,0.15);
+}
+#vid-canvas{
+  position:fixed;top:16px;right:16px;width:200px;height:150px;
+  border-radius:14px;z-index:21;pointer-events:none;transform:scaleX(-1);
+}
+
+/* top-left HUD */
+#hud{position:fixed;top:16px;left:16px;z-index:30;width:210px}
+#shape-title{
+  font-size:22px;font-weight:700;letter-spacing:4px;text-transform:uppercase;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  margin-bottom:2px;
+}
+#sub-title{font-size:10px;color:var(--muted);letter-spacing:2px;margin-bottom:14px}
+
+/* shape pills */
+#shapes{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px}
+.sp{
+  padding:4px 10px;border-radius:20px;font-size:10px;cursor:pointer;
+  border:1px solid var(--border);color:var(--muted);letter-spacing:1px;
+  transition:all .18s;background:var(--surface);user-select:none;
+}
+.sp:hover{border-color:var(--accent);color:var(--accent)}
+.sp.on{background:rgba(192,132,252,0.2);border-color:var(--accent);color:var(--accent);text-shadow:0 0 10px var(--accent)}
+
+/* gesture panel */
+#gbox{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:10px 12px;margin-bottom:10px;
+}
+#gname{font-size:13px;font-weight:700;margin-bottom:2px;min-height:18px;letter-spacing:1px}
+#ginfo{font-size:9px;color:var(--muted);letter-spacing:1px;min-height:12px}
+
+/* meters */
+.meter-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.meter-label{font-size:9px;color:var(--muted);letter-spacing:1px;width:62px;flex-shrink:0}
+.meter-track{flex:1;height:3px;background:rgba(255,255,255,0.07);border-radius:3px;position:relative;overflow:visible}
+.meter-fill{height:100%;border-radius:3px;transition:width .1s}
+.meter-fill.ex{background:linear-gradient(90deg,var(--accent2),var(--accent))}
+.meter-fill.ry{background:linear-gradient(90deg,var(--accent3),var(--accent))}
+.meter-fill.rx{background:linear-gradient(90deg,var(--accent4),var(--accent2))}
+.meter-fill.rz{background:linear-gradient(90deg,var(--accent),var(--accent3))}
+.meter-fill.zm{background:linear-gradient(90deg,var(--accent2),var(--accent4))}
+.meter-center{position:absolute;left:50%;top:-3px;width:1px;height:9px;background:rgba(255,255,255,0.15);transform:translateX(-50%)}
+
+/* gesture reference — bottom left */
+#ref{
+  position:fixed;bottom:16px;left:16px;z-index:30;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:10px 14px;
+}
+#ref-title{font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px}
+.rrow{display:flex;align-items:flex-start;gap:8px;margin-bottom:5px;font-size:9px;color:var(--muted);letter-spacing:.5px;line-height:1.4}
+.rrow .ico{font-size:13px;flex-shrink:0;width:18px}
+.rrow.hi{color:var(--text)}
+.rrow .badge{
+  font-size:8px;padding:1px 5px;border-radius:8px;margin-left:4px;
+  background:rgba(192,132,252,0.2);color:var(--accent);border:1px solid rgba(192,132,252,0.3);
+  flex-shrink:0;
+}
+
+/* status — bottom right */
+#stat{position:fixed;bottom:16px;right:16px;z-index:30;text-align:right}
+#stat div{font-size:9px;color:var(--muted);letter-spacing:1px;line-height:1.8}
+
+/* trail toggle */
+#trail-btn{
+  display:inline-block;margin-top:8px;padding:3px 10px;border-radius:10px;
+  font-size:9px;cursor:pointer;border:1px solid var(--border);
+  color:var(--muted);letter-spacing:1px;transition:all .18s;background:var(--surface);
+}
+#trail-btn.on{border-color:var(--accent4);color:var(--accent4)}
+
+/* loading */
+#ld{
+  position:fixed;inset:0;background:#000;z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+}
+#ld p{font-size:11px;color:var(--muted);letter-spacing:3px}
+.spin{width:40px;height:40px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<video id="vid" autoplay muted playsinline></video>
+<canvas id="vid-canvas"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="shape-title">HEART</div>
+  <div id="sub-title">PARTICLE GESTURE LAB · THREE.JS</div>
+
+  <div id="shapes">
+    <div class="sp on"  onclick="setShape('heart')">♥ HEART</div>
+    <div class="sp"     onclick="setShape('flower')">✿ FLOWER</div>
+    <div class="sp"     onclick="setShape('saturn')">◎ SATURN</div>
+    <div class="sp"     onclick="setShape('fire')">✦ FIRE</div>
+    <div class="sp"     onclick="setShape('galaxy')">⊛ GALAXY</div>
+    <div class="sp"     onclick="setShape('dna')">⚙ DNA</div>
+    <div class="sp"     onclick="setShape('torus')">◉ KNOT</div>
+    <div class="sp"     onclick="setShape('butterfly')">❋ BUTTERFLY</div>
+    <div class="sp"     onclick="setShape('wave')">〜 WAVE</div>
+    <div class="sp"     onclick="setShape('sphere')">○ SPHERE</div>
+    <div class="sp"     onclick="setShape('cube')">□ CUBE</div>
+    <div class="sp"     onclick="setShape('vortex')">↺ VORTEX</div>
+  </div>
+
+  <!-- gesture state -->
+  <div id="gbox">
+    <div id="gname">— awaiting hand</div>
+    <div id="ginfo">show your hand to the camera</div>
+  </div>
+
+  <!-- meters -->
+  <div class="meter-row">
+    <div class="meter-label">EXPAND</div>
+    <div class="meter-track"><div class="meter-fill ex" id="m-ex" style="width:50%"></div></div>
+  </div>
+  <div class="meter-row">
+    <div class="meter-label">ROT Y</div>
+    <div class="meter-track">
+      <div class="meter-center"></div>
+      <div class="meter-fill ry" id="m-ry-r" style="width:0%;position:absolute;left:50%"></div>
+      <div class="meter-fill ry" id="m-ry-l" style="width:0%;position:absolute;right:50%;border-radius:3px 0 0 3px"></div>
+    </div>
+  </div>
+  <div class="meter-row">
+    <div class="meter-label">ROT X</div>
+    <div class="meter-track">
+      <div class="meter-center"></div>
+      <div class="meter-fill rx" id="m-rx-r" style="width:0%;position:absolute;left:50%"></div>
+      <div class="meter-fill rx" id="m-rx-l" style="width:0%;position:absolute;right:50%;border-radius:3px 0 0 3px"></div>
+    </div>
+  </div>
+  <div class="meter-row">
+    <div class="meter-label">ROT Z</div>
+    <div class="meter-track">
+      <div class="meter-center"></div>
+      <div class="meter-fill rz" id="m-rz-r" style="width:0%;position:absolute;left:50%"></div>
+      <div class="meter-fill rz" id="m-rz-l" style="width:0%;position:absolute;right:50%;border-radius:3px 0 0 3px"></div>
+    </div>
+  </div>
+  <div class="meter-row">
+    <div class="meter-label">ZOOM</div>
+    <div class="meter-track"><div class="meter-fill zm" id="m-zm" style="width:50%"></div></div>
+  </div>
+
+  <div id="trail-btn" onclick="toggleTrail()">TRAIL: OFF</div>
+</div>
+
+<!-- gesture reference -->
+<div id="ref">
+  <div id="ref-title">GESTURE GUIDE</div>
+  <div class="rrow" id="r-fist"><span class="ico">✊</span>Fist + move → directional rotation<span class="badge">XYZ</span></div>
+  <div class="rrow" id="r-open"><span class="ico">🖐</span>Open hand → expand / scatter</div>
+  <div class="rrow" id="r-point"><span class="ico">☝</span>Point → next shape</div>
+  <div class="rrow" id="r-peace"><span class="ico">✌</span>Peace → color cycle</div>
+  <div class="rrow" id="r-three"><span class="ico">🤟</span>3 fingers → Z-roll axis</div>
+  <div class="rrow" id="r-pinch"><span class="ico">🤌</span>Pinch → zoom camera</div>
+  <div class="rrow" id="r-gun"><span class="ico">🤙</span>Thumb+pinky → wave pulse</div>
+  <div class="rrow" id="r-ok"><span class="ico">👌</span>OK sign → freeze / unfreeze</div>
+  <div class="rrow" id="r-l"><span class="ico">🤘</span>Rock sign → explode burst</div>
+  <div class="rrow" id="r-two"><span class="ico">🤞</span>Crossed fingers → gravity</div>
+</div>
+
+<!-- status -->
+<div id="stat">
+  <div id="st-cam">camera: init…</div>
+  <div id="st-fps">fps: —</div>
+  <div id="st-pts">pts: 5000</div>
+  <div id="st-gesture">—</div>
+</div>
+
+<div id="ld"><div class="spin"></div><p>INITIALISING PARTICLE ENGINE</p></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════
+   CONFIG
+═══════════════════════════════════════════════════════ */
+const N = 5000;
+
+/* ═══════════════════════════════════════════════════════
+   SCENE
+═══════════════════════════════════════════════════════ */
+const cvs = document.getElementById('c');
+const scene = new THREE.Scene();
+const cam3 = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
+cam3.position.z = 9;
+const renderer = new THREE.WebGLRenderer({canvas:cvs,antialias:true,alpha:false});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setClearColor(0x050508,1);
+window.addEventListener('resize',()=>{
+  cam3.aspect=innerWidth/innerHeight; cam3.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+/* ═══════════════════════════════════════════════════════
+   BUFFERS
+═══════════════════════════════════════════════════════ */
+const geo = new THREE.BufferGeometry();
+const pos = new Float32Array(N*3);
+const col = new Float32Array(N*3);
+const tp  = new Float32Array(N*3);
+const tc  = new Float32Array(N*3);
+
+for(let i=0;i<N;i++){
+  pos[i*3]=(Math.random()-.5)*8; pos[i*3+1]=(Math.random()-.5)*8; pos[i*3+2]=(Math.random()-.5)*4;
+  col[i*3]=.8; col[i*3+1]=.3; col[i*3+2]=1;
+}
+const pa = new THREE.BufferAttribute(pos,3); geo.setAttribute('position',pa);
+const ca = new THREE.BufferAttribute(col,3); geo.setAttribute('color',ca);
+
+function mkSprite(){
+  const c=document.createElement('canvas'); c.width=c.height=64;
+  const x=c.getContext('2d'),g=x.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(255,255,255,1)');
+  g.addColorStop(.45,'rgba(255,255,255,.8)');
+  g.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=g; x.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+const mat = new THREE.PointsMaterial({
+  size:.11,map:mkSprite(),vertexColors:true,
+  transparent:true,depthWrite:false,
+  blending:THREE.AdditiveBlending,sizeAttenuation:true,alphaTest:.001
+});
+const pts = new THREE.Points(geo,mat);
+scene.add(pts);
+
+/* ═══════════════════════════════════════════════════════
+   COLOUR
+═══════════════════════════════════════════════════════ */
+function hsl(h,s,l){
+  h=((h%1)+1)%1;
+  if(!s) return[l,l,l];
+  const q=l<.5?l*(1+s):l+s-l*s,p=2*l-q;
+  const f=t=>{t=((t%1)+1)%1;if(t<1/6)return p+(q-p)*6*t;if(t<.5)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;};
+  return[f(h+1/3),f(h),f(h-1/3)];
+}
+
+/* ═══════════════════════════════════════════════════════
+   SHAPES
+═══════════════════════════════════════════════════════ */
+let hueShift=0;
+function sc(name,n){
+  const h=hueShift;
+  const map={
+    heart:[0,.95,.65],flower:[.28,.9,.6],saturn:[.1,.75,.65],
+    fire:[n,.98,.65],galaxy:[.55,.75,.55+n*.2],dna:[.5+n*.5,.9,.6],
+    torus:[n,.9,.6],butterfly:[.75+n*.45,.9,.65],
+    wave:[.6+n*.4,.85,.6],sphere:[.33+n*.33,.8,.6],
+    cube:[.08+n*.3,.9,.65],vortex:[n,.9,.5+n*.3]
+  };
+  const v=map[name]||[n,.8,.6];
+  return hsl((h+v[0])%1,v[1],v[2]);
+}
+
+function sHeart(t){const x=16*Math.pow(Math.sin(t),3),y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);return[x/8.5,y/8.5,(Math.random()-.5)*.15];}
+function sFlower(t){const r=(0.5+0.5*Math.cos(5*t))*2.8;return[r*Math.cos(t),r*Math.sin(t),(Math.random()-.5)*.2];}
+function sSaturn(){if(Math.random()<.42){const phi=Math.acos(2*Math.random()-1),th=Math.random()*Math.PI*2,r=1.6+Math.random()*.3;return[r*Math.sin(phi)*Math.cos(th),r*Math.sin(phi)*Math.sin(th)*.5,r*Math.cos(phi)];}const a=Math.random()*Math.PI*2,r=2.3+Math.random()*1.5;return[r*Math.cos(a),(Math.random()-.5)*.07,r*Math.sin(a)];}
+function sGalaxy(){const arm=Math.floor(Math.random()*3),t=Math.random(),ang=arm*(Math.PI*2/3)+t*Math.PI*3,r=.3+t*2.6,sp=(1-t)*.08+t*.5;return[r*Math.cos(ang)+(Math.random()-.5)*sp,(Math.random()-.5)*.2,r*Math.sin(ang)+(Math.random()-.5)*sp];}
+function sDNA(i){const t=(i/N)*Math.PI*10,st=i%2,y=(i/N)*7-3.5,r=1.3;if(Math.random()<.22){const ct=Math.random();return[r*Math.cos(t)*ct+r*Math.cos(t+Math.PI)*(1-ct),y,r*Math.sin(t)*ct+r*Math.sin(t+Math.PI)*(1-ct)];}return[r*Math.cos(t+st*Math.PI),y,r*Math.sin(t+st*Math.PI)];}
+function sTorus(){const t=Math.random()*Math.PI*2,r=Math.cos(3*t)+2,s=(Math.random()-.5)*.12;return[r*Math.cos(2*t)+s,r*Math.sin(2*t)+s,-Math.sin(3*t)+s];}
+function sButterfly(t){const r=Math.exp(Math.cos(t))-2*Math.cos(4*t)-Math.pow(Math.sin(t/12),5);return[r*Math.sin(t)*.65,r*Math.cos(t)*.65,(Math.random()-.5)*.25];}
+function sWave(i){const x=(i/N)*8-4,z=(Math.random()-.5)*4,y=Math.sin(x*1.5)*Math.cos(z*.8)*1.5;return[x,y+(Math.random()-.5)*.2,z];}
+function sSphere(){const phi=Math.acos(2*Math.random()-1),th=Math.random()*Math.PI*2,r=2.5+Math.random()*.3;return[r*Math.sin(phi)*Math.cos(th),r*Math.sin(phi)*Math.sin(th),r*Math.cos(phi)];}
+function sCube(){const side=Math.floor(Math.random()*6);const a=(Math.random()-.5)*4,b=(Math.random()-.5)*4;const faces=[[a,b,2],[a,b,-2],[a,2,b],[a,-2,b],[2,a,b],[-2,a,b]];return faces[side];}
+function sVortex(i){const t=(i/N)*Math.PI*12,r=.5+t/12*2.5,y=(i/N)*7-3.5;return[r*Math.cos(t),y,r*Math.sin(t)];}
+
+function recompute(name){
+  isFW=(name==='fire'); if(isFW){initFW();return;}
+  for(let i=0;i<N;i++){
+    const t=(i/N)*Math.PI*2,jt=t+(Math.random()-.5)*.25;
+    let p;
+    switch(name){
+      case'heart':p=sHeart(jt);break; case'flower':p=sFlower(jt);break;
+      case'saturn':p=sSaturn();break; case'galaxy':p=sGalaxy();break;
+      case'dna':p=sDNA(i);break; case'torus':p=sTorus();break;
+      case'butterfly':p=sButterfly(t*6);break; case'wave':p=sWave(i);break;
+      case'sphere':p=sSphere();break; case'cube':p=sCube();break;
+      case'vortex':p=sVortex(i);break;
+      default:p=[(Math.random()-.5)*5,(Math.random()-.5)*5,(Math.random()-.5)*5];
+    }
+    tp[i*3]=p[0];tp[i*3+1]=p[1];tp[i*3+2]=p[2];
+    const c=sc(name,i/N);tc[i*3]=c[0];tc[i*3+1]=c[1];tc[i*3+2]=c[2];
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   FIREWORKS
+═══════════════════════════════════════════════════════ */
+let isFW=false, fwP=[];
+function initFW(){
+  fwP=[];
+  for(let i=0;i<N;i++){
+    const bx=(Math.random()-.5)*5,by=(Math.random()-.5)*2.5,bz=(Math.random()-.5)*2;
+    const a=Math.random()*Math.PI*2,a2=Math.random()*Math.PI,sp=.03+Math.random()*.1;
+    fwP.push({x:bx,y:by,z:bz,vx:Math.sin(a2)*Math.cos(a)*sp,vy:Math.sin(a2)*Math.sin(a)*sp,vz:Math.cos(a2)*sp,life:Math.random(),ml:.5+Math.random()*2,bx,by,bz,h:Math.random()});
+  }
+}
+function tickFW(dt){
+  for(let i=0;i<N;i++){
+    const p=fwP[i];p.life+=dt;
+    if(p.life>p.ml){p.life=0;p.x=p.bx;p.y=p.by;p.z=p.bz;const a=Math.random()*Math.PI*2,a2=Math.random()*Math.PI,sp=(.03+Math.random()*.1)*expF;p.vx=Math.sin(a2)*Math.cos(a)*sp;p.vy=Math.sin(a2)*Math.sin(a)*sp;p.vz=Math.cos(a2)*sp;}
+    p.x+=p.vx;p.y+=p.vy-.0005;p.z+=p.vz;p.vx*=.97;p.vy*=.97;p.vz*=.97;
+    pos[i*3]=p.x;pos[i*3+1]=p.y;pos[i*3+2]=p.z;
+    const fd=1-(p.life/p.ml),c=hsl(p.h,1,.5+fd*.3);col[i*3]=c[0];col[i*3+1]=c[1];col[i*3+2]=c[2];
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   PHYSICS STATE
+═══════════════════════════════════════════════════════ */
+let expF=1, tExpF=1;
+// Rotation velocity
+let rv={x:0,y:.002,z:0};
+const RMAX=.07,RDAMP=.91;
+// Fist tracking
+let fistOn=false,fx=.5,fy=.5,fsx=.5,fsy=.5;
+// Camera zoom
+let tZoom=9;
+// Frozen
+let frozen=false;
+// Gravity mode
+let gravOn=false;
+const gravVel=new Array(N).fill(null).map(()=>({y:0}));
+// Wave pulse
+let wavePulse=0;
+// Explode burst
+let burstT=0;
+// Trail
+let trailOn=false;
+// Color cycling (peace gesture)
+let colorCycle=false;
+// Tilt Z
+let tiltOn=false,tiltTarget=0;
+// Two-hand scale (future) – single hand for now
+// Wrist velocity for momentum when fist released
+let wristHist=[];
+
+/* ═══════════════════════════════════════════════════════
+   TRAIL RENDERER (secondary pass)
+═══════════════════════════════════════════════════════ */
+let trailGeo,trailMat,trailMesh;
+const TRAIL_N=1500;
+const tpos=new Float32Array(TRAIL_N*3);
+const tcol2=new Float32Array(TRAIL_N*3);
+let trailPtr=0;
+function initTrail(){
+  trailGeo=new THREE.BufferGeometry();
+  trailGeo.setAttribute('position',new THREE.BufferAttribute(tpos,3));
+  trailGeo.setAttribute('color',new THREE.BufferAttribute(tcol2,3));
+  trailMat=new THREE.PointsMaterial({size:.06,vertexColors:true,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true,opacity:.5});
+  trailMesh=new THREE.Points(trailGeo,trailMat);
+  scene.add(trailMesh);
+}
+initTrail();
+function pushTrail(){
+  const step=10;
+  for(let i=0;i<N;i+=step){
+    const idx=(trailPtr%TRAIL_N)*3;
+    tpos[idx]=pos[i*3];tpos[idx+1]=pos[i*3+1];tpos[idx+2]=pos[i*3+2];
+    tcol2[idx]=col[i*3]*.4;tcol2[idx+1]=col[i*3+1]*.4;tcol2[idx+2]=col[i*3+2]*.4;
+    trailPtr++;
+  }
+  trailGeo.attributes.position.needsUpdate=true;
+  trailGeo.attributes.color.needsUpdate=true;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ANIMATION LOOP
+═══════════════════════════════════════════════════════ */
+let clk=0,lts=0,fc=0,ft=0;
+const shapes=['heart','flower','saturn','fire','galaxy','dna','torus','butterfly','wave','sphere','cube','vortex'];
+let curShape='heart',shapeIdx=0;
+
+function animate(ts){
+  requestAnimationFrame(animate);
+  const dt=Math.min((ts-lts)/1000,.05);lts=ts;clk+=dt;
+
+  fc++;ft+=dt;
+  if(ft>=1){document.getElementById('st-fps').textContent='fps: '+fc;fc=0;ft=0;}
+
+  if(frozen){renderer.render(scene,cam3);return;}
+
+  // expansion
+  expF+=(tExpF-expF)*.07;
+  setMeter('m-ex',Math.min(100,Math.max(0,(expF-.4)*83)));
+
+  // camera zoom
+  cam3.position.z+=(tZoom-cam3.position.z)*.08;
+  setMeter('m-zm',Math.min(100,Math.max(0,((18-cam3.position.z)/14)*100)));
+
+  // wave pulse decay
+  if(wavePulse>0) wavePulse-=dt*.8;
+
+  // burst decay
+  if(burstT>0) burstT-=dt;
+
+  // color cycle (peace)
+  if(colorCycle){ hueShift=(hueShift+dt*.08)%1; recompute(curShape); }
+
+  // ── ROTATION ─────────────────────────────────────────────
+  if(fistOn){
+    const dx=(fx-fsx)*10,dy=(fy-fsy)*10;
+    rv.y+=dx*.12; rv.x+=dy*.12;
+    fsx+=(fx-fsx)*.2; fsy+=(fy-fsy)*.2;
+    rv.x=Math.max(-RMAX,Math.min(RMAX,rv.x));
+    rv.y=Math.max(-RMAX,Math.min(RMAX,rv.y));
+    // record wrist history for momentum
+    wristHist.push({x:fx,y:fy,t:clk});
+    if(wristHist.length>8)wristHist.shift();
+  } else {
+    rv.x*=RDAMP; rv.y*=RDAMP; rv.z*=RDAMP;
+    // minimal idle drift
+    if(Math.abs(rv.y)<.0008)rv.y=.0018;
+  }
+  if(tiltOn){rv.z+=(tiltTarget-rv.z)*.06;}
+  else{rv.z*=.92;}
+
+  pts.rotation.x+=rv.x;
+  pts.rotation.y+=rv.y;
+  pts.rotation.z+=rv.z;
+
+  // mirror trail rotation
+  if(trailOn){trailMesh.rotation.copy(pts.rotation);}
+
+  // meters
+  const rm=RMAX;
+  setMeterBi('m-ry-r','m-ry-l',rv.y,rm);
+  setMeterBi('m-rx-r','m-rx-l',rv.x,rm);
+  setMeterBi('m-rz-r','m-rz-l',rv.z,rm);
+
+  // ── PARTICLES ────────────────────────────────────────────
+  if(isFW){
+    tickFW(dt);pa.needsUpdate=true;ca.needsUpdate=true;mat.size=.14*expF;
+  } else {
+    const lerp=.05;
+    for(let i=0;i<N;i++){
+      const n=i/N;
+      const wave=Math.sin(clk*1.5+i*.007)*.02;
+      // wave pulse offset
+      const wp=wavePulse>0?Math.sin(clk*8+i*.05)*wavePulse*.6:0;
+      // burst offset
+      let bx=0,by=0,bz=0;
+      if(burstT>0){const bf=burstT;bx=(pos[i*3])*bf*.4;by=(pos[i*3+1])*bf*.4;bz=(pos[i*3+2])*bf*.3;}
+      // gravity
+      let gy=0;
+      if(gravOn){gravVel[i].y-=dt*.15;gy=gravVel[i].y;if(pos[i*3+1]<-4){gravVel[i].y*=-.5;}}
+      else{gravVel[i].y*=.9;}
+
+      const lx=tp[i*3]*expF+bx, ly=tp[i*3+1]*expF+by, lz=tp[i*3+2]*expF+bz;
+      pos[i*3]+=(lx-pos[i*3])*lerp+wave+wp;
+      pos[i*3+1]+=(ly-pos[i*3+1])*lerp+wave*.5+gy*dt;
+      pos[i*3+2]+=(lz-pos[i*3+2])*lerp;
+      col[i*3]+=(tc[i*3]-col[i*3])*.06;
+      col[i*3+1]+=(tc[i*3+1]-col[i*3+1])*.06;
+      col[i*3+2]+=(tc[i*3+2]-col[i*3+2])*.06;
+    }
+    pa.needsUpdate=true;ca.needsUpdate=true;
+    mat.size=(.105+Math.sin(clk*2)*.012)*expF;
+  }
+
+  if(trailOn)pushTrail();
+  trailMesh.visible=trailOn;
+
+  renderer.render(scene,cam3);
+}
+animate(0);
+
+/* ═══════════════════════════════════════════════════════
+   UI HELPERS
+═══════════════════════════════════════════════════════ */
+function setMeter(id,pct){document.getElementById(id).style.width=pct+'%';}
+function setMeterBi(rId,lId,val,max){
+  const pct=Math.min(50,Math.abs(val/max)*50);
+  if(val>=0){document.getElementById(rId).style.width=pct+'%';document.getElementById(lId).style.width='0%';}
+  else{document.getElementById(lId).style.width=pct+'%';document.getElementById(rId).style.width='0%';}
+}
+function hilite(id){
+  document.querySelectorAll('#ref .rrow').forEach(r=>r.classList.remove('hi'));
+  if(id)document.getElementById(id).classList.add('hi');
+}
+
+function setShape(name){
+  curShape=name;shapeIdx=shapes.indexOf(name);
+  document.getElementById('shape-title').textContent=name.toUpperCase();
+  document.querySelectorAll('.sp').forEach((b,i)=>b.classList.toggle('on',shapes[i]===name));
+  recompute(name);
+}
+function nextShape(){shapeIdx=(shapeIdx+1)%shapes.length;setShape(shapes[shapeIdx]);}
+
+let trailBtnEl=document.getElementById('trail-btn');
+function toggleTrail(){trailOn=!trailOn;trailBtnEl.textContent='TRAIL: '+(trailOn?'ON':'OFF');trailBtnEl.classList.toggle('on',trailOn);}
+
+recompute('heart');
+
+/* ═══════════════════════════════════════════════════════
+   GESTURE ENGINE
+   Gestures detected:
+   1. Fist (0 fingers)        → directional rotation by wrist XY pos
+   2. Open (4-5 fingers)      → expand
+   3. Point (index only)      → next shape
+   4. Peace (index+middle)    → color cycle
+   5. 3 fingers (i+m+r)       → Z-roll tilt by hand X pos
+   6. Pinch (thumb≈index tip) → zoom
+   7. Hang loose (thumb+pinky)→ wave pulse
+   8. OK (pinch + others)     → freeze toggle
+   9. Rock (index+pinky)      → explosion burst
+   10. Crossed fingers         → gravity toggle
+═══════════════════════════════════════════════════════ */
+function dist2D(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function up(lm,tip,pip){return lm[tip].y<lm[pip].y;}
+function isFist(lm){return!up(lm,8,6)&&!up(lm,12,10)&&!up(lm,16,14)&&!up(lm,20,18)&&lm[4].x>lm[3].x;}
+function isPinch(lm){return dist2D(lm[4],lm[8])<0.065;}
+function isOK(lm){return isPinch(lm)&&up(lm,12,10)&&up(lm,16,14)&&up(lm,20,18);}
+function isRock(lm){return up(lm,8,6)&&!up(lm,12,10)&&!up(lm,16,14)&&up(lm,20,18);}
+function isHangLoose(lm){const thu=lm[4].y<lm[2].y;return thu&&!up(lm,8,6)&&!up(lm,12,10)&&!up(lm,16,14)&&up(lm,20,18);}
+
+let lastSwitch=0,lastFreeze=0,lastBurst=0,lastGrav=0;
+let pinchBase=0,pinchActive=false;
+
+function processHand(lm){
+  const iF=up(lm,8,6),mF=up(lm,12,10),rF=up(lm,16,14),pF=up(lm,20,18);
+  const cnt=[iF,mF,rF,pF].filter(Boolean).length;
+  const spread=dist2D(lm[4],lm[20]);
+  const now=Date.now();
+  const wrist=lm[0];
+
+  // Priority order matters — most specific first
+
+  // ── OK → freeze ──────────────────────────────────────────
+  if(isOK(lm)){
+    setG('👌 OK — '+(frozen?'FROZEN':'freeze toggle'),'hold to freeze / unfreeze','r-ok');
+    if(now-lastFreeze>1000){lastFreeze=now;frozen=!frozen;}
+    fistOn=false;pinchActive=false;colorCycle=false;tiltOn=false;gravOn=false;
+    return;
+  }
+
+  // ── ROCK SIGN → explosion burst ──────────────────────────
+  if(isRock(lm)){
+    setG('🤘 ROCK — BURST!','particles explode outward','r-l');
+    if(now-lastBurst>800){lastBurst=now;burstT=.6;tExpF=2.5;setTimeout(()=>tExpF=1,800);}
+    fistOn=false;pinchActive=false;colorCycle=false;tiltOn=false;
+    return;
+  }
+
+  // ── HANG LOOSE → wave pulse ───────────────────────────────
+  if(isHangLoose(lm)){
+    setG('🤙 HANG LOOSE — WAVE PULSE','ripple pulse through shape','r-gun');
+    wavePulse=Math.min(2,wavePulse+.08);
+    fistOn=false;pinchActive=false;colorCycle=false;tiltOn=false;
+    tExpF=1.1;
+    return;
+  }
+
+  // ── FIST → directional rotation ──────────────────────────
+  if(isFist(lm)){
+    fistOn=true;pinchActive=false;colorCycle=false;tiltOn=false;
+    // Mirror because video is flipped
+    fx=1-wrist.x; fy=wrist.y;
+    // Direction label
+    const dx=fx-.5,dy=fy-.5;
+    const ang=Math.atan2(dy,dx)*180/Math.PI;
+    const mag=Math.hypot(dx,dy);
+    let dir='CENTER';
+    if(mag>.07){
+      if(ang>-22.5&&ang<=22.5)dir='→ RIGHT';
+      else if(ang>22.5&&ang<=67.5)dir='↘ DOWN-RIGHT';
+      else if(ang>67.5&&ang<=112.5)dir='↓ DOWN';
+      else if(ang>112.5&&ang<=157.5)dir='↙ DOWN-LEFT';
+      else if(ang>157.5||ang<=-157.5)dir='← LEFT';
+      else if(ang>-157.5&&ang<=-112.5)dir='↖ UP-LEFT';
+      else if(ang>-112.5&&ang<=-67.5)dir='↑ UP';
+      else dir='↗ UP-RIGHT';
+    }
+    setG('✊ FIST — '+dir,'move fist to steer rotation','r-fist');
+    tExpF=.65;
+    // draw fist direction indicator on overlay canvas
+    drawFistArrow(fx,fy);
+    return;
+  }
+
+  fistOn=false;
+  clearOverlay();
+
+  // ── PINCH → zoom ─────────────────────────────────────────
+  if(isPinch(lm)){
+    colorCycle=false;tiltOn=false;
+    if(!pinchActive){pinchActive=true;pinchBase=dist2D(lm[4],lm[8]);}
+    const cur=dist2D(lm[4],lm[8]);
+    tZoom=Math.max(4,Math.min(18,9*(pinchBase/Math.max(cur,.01))));
+    setG('🤌 PINCH — ZOOM '+(tZoom<9?'IN':'OUT'),'spread to zoom in, close to zoom out','r-pinch');
+    document.getElementById('ginfo').textContent='camera z: '+tZoom.toFixed(1);
+    return;
+  }
+  pinchActive=false;
+
+  // ── CROSSED FINGERS (index+middle crossing) → gravity ────
+  // Detect: index and middle both up but tips close together
+  if(iF&&mF&&!rF&&!pF&&dist2D(lm[8],lm[12])<.06){
+    setG('🤞 CROSSED — GRAVITY '+(gravOn?'ON':'toggle'),'particles fall with gravity','r-two');
+    if(now-lastGrav>1000){lastGrav=now;gravOn=!gravOn;if(!gravOn)for(let i=0;i<N;i++)gravVel[i].y=0;}
+    colorCycle=false;tiltOn=false;
+    tExpF=1;
+    return;
+  }
+
+  // ── OPEN HAND → expand ────────────────────────────────────
+  if(cnt>=4){
+    colorCycle=false;tiltOn=false;
+    tExpF=1.4+spread*2.5;
+    setG('🖐 OPEN — EXPANDING','wider spread = more expansion','r-open');
+    document.getElementById('ginfo').textContent='spread: '+(spread*100).toFixed(0)+'%  expF: '+expF.toFixed(2);
+    return;
+  }
+
+  // ── POINT → next shape ────────────────────────────────────
+  if(iF&&!mF&&!rF&&!pF){
+    colorCycle=false;tiltOn=false;
+    setG('☝ POINT — NEXT SHAPE','hold to cycle shapes','r-point');
+    if(now-lastSwitch>1100){lastSwitch=now;nextShape();}
+    tExpF=.9;
+    return;
+  }
+
+  // ── PEACE → color cycle ───────────────────────────────────
+  if(iF&&mF&&!rF&&!pF){
+    colorCycle=true;tiltOn=false;
+    tExpF=1.1+spread;
+    setG('✌ PEACE — COLOR CYCLE','hue rotating through spectrum','r-peace');
+    document.getElementById('ginfo').textContent='hue: '+(hueShift*360).toFixed(0)+'°';
+    return;
+  }
+
+  // ── 3 FINGERS → Z-roll ────────────────────────────────────
+  if(iF&&mF&&rF&&!pF){
+    colorCycle=false;tiltOn=true;
+    tiltTarget=(1-wrist.x-.5)*.05;
+    setG('🤟 3 FINGERS — Z-ROLL','hand X position controls roll axis','r-three');
+    document.getElementById('ginfo').textContent='roll: '+(tiltTarget*1000).toFixed(1);
+    tExpF=1.1;
+    return;
+  }
+
+  // fallback
+  colorCycle=false;tiltOn=false;
+  setG(cnt+' finger'+(cnt!==1?'s':'')+' up','','');
+  tExpF=.8+cnt*.2;
+}
+
+function setG(name,info,refId){
+  document.getElementById('gname').textContent=name;
+  document.getElementById('ginfo').textContent=info;
+  document.getElementById('st-gesture').textContent=name;
+  hilite(refId);
+}
+
+function noHand(){
+  fistOn=false;pinchActive=false;colorCycle=false;tiltOn=false;frozen=false;
+  clearOverlay();
+  setG('— no hand','show your hand to the camera','');
+  tExpF=1;
+}
+
+/* ═══════════════════════════════════════════════════════
+   OVERLAY CANVAS (hand skeleton + arrow on webcam preview)
+═══════════════════════════════════════════════════════ */
+const ovc=document.getElementById('vid-canvas');
+const ovx=ovc.getContext('2d');
+ovc.width=200;ovc.height=150;
+
+function drawSkeleton(lm){
+  ovx.clearRect(0,0,200,150);
+  const W=200,H=150;
+  // connections
+  const conn=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],[0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17]];
+  ovx.strokeStyle='rgba(192,132,252,0.6)';ovx.lineWidth=1.5;
+  conn.forEach(([a,b])=>{
+    ovx.beginPath();
+    // mirror back since canvas is also CSS-flipped
+    ovx.moveTo((1-lm[a].x)*W,lm[a].y*H);
+    ovx.lineTo((1-lm[b].x)*W,lm[b].y*H);
+    ovx.stroke();
+  });
+  // dots on fingertips
+  [4,8,12,16,20].forEach(i=>{
+    ovx.beginPath();
+    ovx.arc((1-lm[i].x)*W,lm[i].y*H,3,0,Math.PI*2);
+    ovx.fillStyle='#e879f9';ovx.fill();
+  });
+}
+
+function drawFistArrow(fx,fy){
+  ovx.clearRect(0,0,200,150);
+  const cx=100,cy=75;
+  const tx=fx*200,ty=fy*150;
+  const dx=tx-cx,dy=ty-cy;
+  const len=Math.hypot(dx,dy);
+  if(len<5)return;
+  ovx.save();
+  ovx.strokeStyle='#e879f9';ovx.lineWidth=3;
+  ovx.shadowColor='#e879f9';ovx.shadowBlur=8;
+  ovx.beginPath();ovx.moveTo(cx,cy);ovx.lineTo(tx,ty);ovx.stroke();
+  // arrowhead
+  const ang=Math.atan2(dy,dx);
+  ovx.beginPath();
+  ovx.moveTo(tx,ty);
+  ovx.lineTo(tx-12*Math.cos(ang-.45),ty-12*Math.sin(ang-.45));
+  ovx.lineTo(tx-12*Math.cos(ang+.45),ty-12*Math.sin(ang+.45));
+  ovx.closePath();ovx.fillStyle='#e879f9';ovx.fill();
+  ovx.restore();
+  // center dot
+  ovx.beginPath();ovx.arc(cx,cy,5,0,Math.PI*2);
+  ovx.fillStyle='rgba(232,121,249,0.5)';ovx.fill();
+}
+
+function clearOverlay(){ovx.clearRect(0,0,200,150);}
+
+/* ═══════════════════════════════════════════════════════
+   CAMERA + MEDIAPIPE
+═══════════════════════════════════════════════════════ */
+const vid=document.getElementById('vid');
+
+async function startCam(){
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240,facingMode:'user'}});
+    vid.srcObject=s;
+    await new Promise(r=>vid.addEventListener('loadeddata',r,{once:true}));
+    document.getElementById('st-cam').textContent='camera: active ✓';
+    loadMP();
+  }catch(e){
+    document.getElementById('st-cam').textContent='camera: blocked — auto';
+    autopilot();
+  }
+}
+
+function loadMP(){
+  const s1=document.createElement('script');
+  s1.src='https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js';
+  s1.onload=()=>{
+    const s2=document.createElement('script');
+    s2.src='https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
+    s2.onload=()=>initMP();
+    s2.onerror=()=>autopilot();
+    document.head.appendChild(s2);
+  };
+  s1.onerror=()=>autopilot();
+  document.head.appendChild(s1);
+}
+
+function initMP(){
+  if(!window.Hands){autopilot();return;}
+  try{
+    const h=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+    h.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:.7,minTrackingConfidence:.6});
+    h.onResults(r=>{
+      if(!r.multiHandLandmarks||!r.multiHandLandmarks.length){noHand();return;}
+      const lm=r.multiHandLandmarks[0];
+      drawSkeleton(lm);
+      processHand(lm);
+    });
+    const c=new Camera(vid,{onFrame:async()=>await h.send({image:vid}),width:320,height:240});
+    c.start();
+  }catch(e){autopilot();}
+}
+
+/* ═══════════════════════════════════════════════════════
+   AUTOPILOT
+═══════════════════════════════════════════════════════ */
+function autopilot(){
+  let si=0;
+  setInterval(()=>{setShape(shapes[si++%shapes.length]);},3500);
+  setInterval(()=>{
+    fistOn=true;fx=.15+Math.random()*.7;fy=.15+Math.random()*.7;
+    tExpF=.6+Math.random()*.8;
+    setG('✊ AUTO FIST','rotating by simulated gesture','r-fist');
+    setTimeout(()=>{fistOn=false;tExpF=1;},900);
+  },2200);
+  setInterval(()=>{
+    if(Math.random()<.3){wavePulse=1.5;setG('🤙 AUTO WAVE','pulse','r-gun');}
+    else if(Math.random()<.2){burstT=.5;tExpF=2;setTimeout(()=>tExpF=1,700);setG('🤘 AUTO BURST','explode','r-l');}
+  },5000);
+}
+
+/* ═══════════════════════════════════════════════════════
+   BOOT
+═══════════════════════════════════════════════════════ */
+function hideLoader(){const o=document.getElementById('ld');o.style.transition='opacity .6s';o.style.opacity='0';setTimeout(()=>o.remove(),650);}
+setTimeout(()=>{hideLoader();startCam();},900);
+</script>
+</body>
+</html>
